@@ -27,6 +27,7 @@
 #define DEFAULT_SOCKET_NAME "minicap"
 #define DEFAULT_DISPLAY_ID 0
 #define DEFAULT_JPG_QUALITY 80
+#define DEFAULT_CAPTURE_INTERVAL 0
 
 enum {
   QUIRK_DUMB            = 1,
@@ -46,6 +47,7 @@ usage(const char* pname) {
     "  -S:            Skip frames when they cannot be consumed quickly enough.\n"
     "  -t:            Attempt to get the capture method running, then exit.\n"
     "  -i:            Get display information in JSON format. May segfault.\n"
+    "  -T:            The time(seconds) interval of screen capture.\n"
     "  -h:            Show help.\n",
     pname, DEFAULT_DISPLAY_ID, DEFAULT_SOCKET_NAME
   );
@@ -145,6 +147,7 @@ putUInt32LE(unsigned char* data, int value) {
   data[1] = (value & 0x0000FF00) >> 8;
   data[2] = (value & 0x00FF0000) >> 16;
   data[3] = (value & 0xFF000000) >> 24;
+  return 0;
 }
 
 static int
@@ -208,6 +211,7 @@ main(int argc, char* argv[]) {
   const char* pname = argv[0];
   const char* sockname = DEFAULT_SOCKET_NAME;
   uint32_t displayId = DEFAULT_DISPLAY_ID;
+  unsigned int intervalTime = DEFAULT_CAPTURE_INTERVAL;
   unsigned int quality = DEFAULT_JPG_QUALITY;
   bool showInfo = false;
   bool takeScreenshot = false;
@@ -216,7 +220,7 @@ main(int argc, char* argv[]) {
   Projection proj;
 
   int opt;
-  while ((opt = getopt(argc, argv, "d:n:P:Q:siSth")) != -1) {
+  while ((opt = getopt(argc, argv, "d:n:P:Q:T:siSth")) != -1) {
     switch (opt) {
     case 'd':
       displayId = atoi(optarg);
@@ -246,6 +250,9 @@ main(int argc, char* argv[]) {
       break;
     case 't':
       testOnly = true;
+      break;
+    case 'T':
+      intervalTime = atoi(optarg);
       break;
     case 'h':
       usage(pname);
@@ -510,6 +517,7 @@ main(int argc, char* argv[]) {
       // to do it here or the loop will stop.
       minicap->releaseConsumedFrame(&frame);
       haveFrame = false;
+      sleep(intervalTime);
     }
 
 close:
