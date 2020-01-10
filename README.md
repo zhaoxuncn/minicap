@@ -16,9 +16,8 @@ The project consists of two parts. There's the main binary that can be built usi
 * Decent and usable but non-zero latency. Depending on encoding performance and USB transfer speed it may be one to a few frames behind the physical screen.
 * On Android 4.2+, frames are only sent when something changes on the screen. On older versions frames are sent as a constant stream, whether there are changes or not.
 * Easy socket AF_unix interface by default. or use '-R < port >' can set port which sending data using the TCP protocol.
-* Use '-T < seconds >' can set the time(seconds) interval of screen capture.
+* Use '-r < seconds >' can set the fps rate.
 
-![](https://i.imgur.com/jWjMpLn.png)
 
 ## Requirements
 
