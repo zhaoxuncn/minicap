@@ -28,6 +28,8 @@
 #define DEFAULT_SOCKET_NAME "minicap"
 #define DEFAULT_DISPLAY_ID 0
 #define DEFAULT_JPG_QUALITY 80
+#define DEFAULT_CAPTURE_INTERVAL 0
+#define DEFAULT_TCP_PORT 14636
 
 enum {
   QUIRK_DUMB            = 1,
@@ -48,6 +50,7 @@ usage(const char* pname) {
     "  -r <value>:    Frame rate (frames/s)"
     "  -t:            Attempt to get the capture method running, then exit.\n"
     "  -i:            Get display information in JSON format. May segfault.\n"
+    "  -R <value>:    Set port which sending data using the TCP protocol.\n"
     "  -h:            Show help.\n",
     pname, DEFAULT_DISPLAY_ID, DEFAULT_SOCKET_NAME
   );
@@ -211,16 +214,20 @@ main(int argc, char* argv[]) {
   const char* pname = argv[0];
   const char* sockname = DEFAULT_SOCKET_NAME;
   uint32_t displayId = DEFAULT_DISPLAY_ID;
+  unsigned int intervalTime = DEFAULT_CAPTURE_INTERVAL;
   unsigned int quality = DEFAULT_JPG_QUALITY;
   int framePeriodMs = 0;
+  unsigned int portTCP = DEFAULT_TCP_PORT;
   bool showInfo = false;
   bool takeScreenshot = false;
   bool skipFrames = false;
   bool testOnly = false;
+  bool protocolTCP = false;
   Projection proj;
 
   int opt;
-  while ((opt = getopt(argc, argv, "d:n:P:Q:r:siSth")) != -1) {
+
+  while ((opt = getopt(argc, argv, "d:n:P:Q:r:R:siSth")) != -1) {
     float frameRate;
     switch (opt) {
     case 'd':
@@ -263,6 +270,10 @@ main(int argc, char* argv[]) {
     case 't':
       testOnly = true;
       break;
+    case 'R':
+        protocolTCP = true;
+        portTCP = atoi(optarg);
+        break;
     case 'h':
       usage(pname);
       return EXIT_SUCCESS;
@@ -283,7 +294,7 @@ main(int argc, char* argv[]) {
 
   // Start Android's thread pool so that it will be able to serve our requests.
   minicap_start_thread_pool();
-
+  MCINFO("run over minicap_start_thread_pool");
   if (showInfo) {
     Minicap::DisplayInfo info;
 
@@ -359,9 +370,9 @@ main(int argc, char* argv[]) {
   JpgEncoder encoder(4, 0);
   Minicap::Frame frame;
   bool haveFrame = false;
-
   // Server config.
-  SimpleServer server;
+  SimpleServer *server;
+  server = ServerFactory::Create(protocolTCP);
 
   // Set up minicap.
   Minicap* minicap = minicap_create(displayId);
@@ -442,7 +453,7 @@ main(int argc, char* argv[]) {
     return EXIT_SUCCESS;
   }
 
-  if (!server.start(sockname)) {
+  if (!server->start(sockname, portTCP)) {
     MCERROR("Unable to start server on namespace '%s'", sockname);
     goto disaster;
   }
@@ -460,7 +471,7 @@ main(int argc, char* argv[]) {
   banner[23] = quirks;
 
   int fd;
-  while (!gWaiter.isStopped() && (fd = server.accept()) > 0) {
+  while (!gWaiter.isStopped() && (fd = server->accept()) > 0) {
     MCINFO("New client connection");
 
     if (pumps(fd, banner, BANNER_SIZE) < 0) {
