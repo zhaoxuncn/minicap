@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/socket.h>
+#include <thread>
 
 #include <cmath>
 #include <condition_variable>
@@ -46,9 +47,9 @@ usage(const char* pname) {
     "  -Q <value>:    JPEG quality (0-100).\n"
     "  -s:            Take a screenshot and output it to stdout. Needs -P.\n"
     "  -S:            Skip frames when they cannot be consumed quickly enough.\n"
+    "  -r <value>:    Frame rate (frames/s)"
     "  -t:            Attempt to get the capture method running, then exit.\n"
     "  -i:            Get display information in JSON format. May segfault.\n"
-    "  -T <value>:    The time(seconds) interval of screen capture.\n"
     "  -R <value>:    Set port which sending data using the TCP protocol.\n"
     "  -h:            Show help.\n",
     pname, DEFAULT_DISPLAY_ID, DEFAULT_SOCKET_NAME
@@ -215,6 +216,7 @@ main(int argc, char* argv[]) {
   uint32_t displayId = DEFAULT_DISPLAY_ID;
   unsigned int intervalTime = DEFAULT_CAPTURE_INTERVAL;
   unsigned int quality = DEFAULT_JPG_QUALITY;
+  int framePeriodMs = 0;
   unsigned int portTCP = DEFAULT_TCP_PORT;
   bool showInfo = false;
   bool takeScreenshot = false;
@@ -224,7 +226,9 @@ main(int argc, char* argv[]) {
   Projection proj;
 
   int opt;
-  while ((opt = getopt(argc, argv, "d:n:P:Q:T:R:siSth")) != -1) {
+
+  while ((opt = getopt(argc, argv, "d:n:P:Q:r:R:siSth")) != -1) {
+    float frameRate;
     switch (opt) {
     case 'd':
       displayId = atoi(optarg);
@@ -252,11 +256,19 @@ main(int argc, char* argv[]) {
     case 'S':
       skipFrames = true;
       break;
+    case 'r':
+      frameRate = atof(optarg);
+      if(frameRate <= 0.0) {
+        MCINFO("Invalid framerate '%s', expecting a float > 0", optarg);
+        return EXIT_FAILURE;
+      } else {
+        framePeriodMs = 1000/frameRate;
+        skipFrames = true;
+        MCINFO("framerate: %.2f (period %d ms)", frameRate, framePeriodMs);
+      }
+      break;
     case 't':
       testOnly = true;
-      break;
-    case 'T':
-      intervalTime = atoi(optarg);
       break;
     case 'R':
         protocolTCP = true;
@@ -469,6 +481,7 @@ main(int argc, char* argv[]) {
 
     int pending, err;
     while (!gWaiter.isStopped() && (pending = gWaiter.waitForFrame()) > 0) {
+      auto frameAvailableAt = std::chrono::steady_clock::now();
       if (skipFrames && pending > 1) {
         // Skip frames if we have too many. Not particularly thread safe,
         // but this loop should be the only consumer anyway (i.e. nothing
@@ -525,7 +538,9 @@ main(int argc, char* argv[]) {
       // to do it here or the loop will stop.
       minicap->releaseConsumedFrame(&frame);
       haveFrame = false;
-      sleep(intervalTime);
+      if(framePeriodMs > 0) {
+        std::this_thread::sleep_until(frameAvailableAt + std::chrono::milliseconds(framePeriodMs));
+      }
     }
 
 close:
